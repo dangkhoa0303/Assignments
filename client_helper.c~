@@ -1,0 +1,86 @@
+#include "ntp_helper.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <time.h>
+#include <sys/select.h>
+
+#define POLL 3
+
+struct timeval mTime;
+
+void requestMessage(int sockfd, struct sockaddr_in server_addr) {
+    int numbytes;
+    int addr_len = sizeof(server_addr);
+
+    struct timeval mTime;
+
+    struct sntpMessageFormat msg;
+    struct sntpMessageFormat recvMsg;
+
+    /* get current time */
+    gettimeofday(&mTime, NULL);
+
+    /* set all fields to be 0 */
+    initializeMessageFormat(&msg);
+
+    /* set time message departed for server */
+    setMessage(&msg, mTime);
+    /* msg is in ntp format */
+    convertByteOrder(&msg);
+
+    /* Send message to client */
+    if ((numbytes = sendto(sockfd, &msg, sizeof(msg), 0, 
+        (struct sockaddr *) &server_addr, addr_len)) == -1) {
+        perror("sendto error");
+        exit(1);
+    }
+    printf("Sent request\n");
+    
+    /* Receive message from client */
+    if ((numbytes = recvfrom(sockfd, (struct sntpMessageFormat *) &recvMsg,
+            sizeof(struct sntpMessageFormat), 0, (struct sockaddr *) &server_addr,
+            &addr_len)) == -1) {
+        perror("recvfrom error");
+        exit(1);
+    }
+    printf("Received from server\n");
+
+    gettimeofday(&mTime, NULL);
+    if (numbytes > 0) {
+        convertByteOrder(&recvMsg);
+        recvMsg.recvTimestamp = time2ntp(mTime);
+
+        printf("\nMessage received: \n");
+        printTime(mTime);
+        printf("\n");
+        printMessageDetails(recvMsg);
+    } else {
+        printf("No replies from server. \n");
+    }
+}
+
+void setMessage(struct sntpMessageFormat *msg, struct timeval mTime) {
+    // LI
+    msg->li_vn_mode = 0;
+
+    // VN
+    msg->li_vn_mode <<= 3; // shift left 3 bits
+    // version number is 4
+    msg->li_vn_mode |= 4;
+
+    // MODE
+    msg->li_vn_mode <<= 3;
+    // I am a client
+    msg->li_vn_mode |= 3;
+
+    msg->stratum = 1;
+    msg->poll = 4;
+    msg->precision = 4;
+    msg->rootDelay = 0;
+    msg->rootDispersion = 0; 
+
+    msg->originateTimestamp = time2ntp(mTime);
+    msg->transmitTimestamp = time2ntp(mTime);
+}

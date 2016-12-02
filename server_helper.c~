@@ -1,0 +1,80 @@
+#include "ntp_helper.h"
+#include <stdio.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct timeval mTime;
+
+void setMessage(struct sntpMessageFormat* msg) {
+    struct timeval mTime;
+    gettimeofday(&mTime, NULL);
+
+    // time when server received request from client
+    msg->recvTimestamp = time2ntp(mTime);
+
+    // LI - 2 bits
+    msg->li_vn_mode = 0;
+
+    // VN - 3 bits
+    msg->li_vn_mode <<= 2;
+    msg->li_vn_mode |= 4; // client set to 4
+
+    // MODE
+    msg->li_vn_mode <<= 3;
+    // I am the server - replying to client
+    msg->li_vn_mode = 4; 
+
+    msg->stratum = 1;
+    msg->precision = 0;
+    msg->rootDelay = 0;
+    msg->rootDispersion = 0;
+    // set transmit time in ntp format
+    msg->transmitTimestamp = time2ntp(mTime);
+}
+
+void handle(int sockfd, struct sockaddr_in client_addr) {
+
+    int numbytes = 0;
+    int addr_len = sizeof(client_addr);
+    int msgFormatSize = sizeof(struct sntpMessageFormat);
+ 
+    gettimeofday(&mTime, NULL);
+
+    struct sntpMessageFormat sentMsg;
+    struct sntpMessageFormat recvMsg;
+
+    // set all fields to be 0
+    initializeMessageFormat(&sentMsg);
+    initializeMessageFormat(&recvMsg);
+
+    printf("Waiting for request from client...\n");
+
+    // received from client
+    if ((numbytes = recvfrom(sockfd, (struct sntpMessageFormat *) &recvMsg, 
+            msgFormatSize, 0, (struct sockaddr *) &client_addr, &addr_len)) == -1) {
+        perror("error recvfrom");
+        exit(1);
+    }
+
+    // convert message received from Network Byte Order to Host Byte Order
+    recvMsg.recvTimestamp = time2ntp(mTime);
+    convertMessageFormat(&recvMsg);
+    printf("Received message from client: \n");
+    printMessageDetails(recvMsg);
+
+    sentMsg = recvMsg;
+    // set sntp format for replied message
+    setMessage(&sentMsg);
+    // convert message sent from Host Byte Order to Network Byte Order
+    convertMessageFormat(&sentMsg);
+
+    if ((numbytes = sendto(sockfd, (struct sntpMessageFormat*) &sentMsg, 
+            msgFormatSize, 0, (struct sockaddr *) &client_addr, addr_len)) == -1) {
+        perror("error sendto");
+        exit(1);
+    }
+    printf("Replied to client\n");
+}

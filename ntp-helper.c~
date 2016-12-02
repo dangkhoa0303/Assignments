@@ -1,0 +1,18 @@
+#include "ntp-helper.h"
+#include <stdio.h>
+#include <math.h>
+#include <time.h>
+
+void initializeMessageFormat(struct sntpMessageFormat *format) {
+  format->li_vn_mode = 0;
+  format->stratum = 0;
+  format->poll = 0;
+  format->precision = 0;
+  format->rootDelay = 0;
+  format->rootDispersion = 0;
+  format->refIdentifier = 0;
+  format->refTimestamp = 0;
+  format->originateTimestamp = 0;
+  format->recvTimestamp = 0;
+  format->transmitTimestamp = 0;
+}
